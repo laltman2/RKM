@@ -4,7 +4,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 import matplotlib as mpl
 import pandas as pd
-from pyrkm.circuit_utils import Circuit
+from circuit_utils import Circuit
 
 
 class RKMNetwork:
@@ -130,7 +130,7 @@ class RKMNetwork:
 
         fig, ax = plt.subplots()
         nx.draw_networkx(self._graph, pos=self._pos, node_size=800, ax=ax,
-                                   width= edgeweights/np.max(edgeweights)*10, edge_cmap = ecm, edge_color = edgeweights, 
+                                   width= np.abs(edgeweights)/128*60, edge_cmap = ecm, edge_color = edgeweights, 
                                     node_color = nodeweights, cmap = ncm)
         
 #         fig.set_figwidth(12)
