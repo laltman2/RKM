@@ -29,12 +29,11 @@ int k_constrain = 128; // prevent k from going to very high conductance values
 int k_init_constrain = 128; //prevent k from being initialized to very high conductance values
 int kwvar = 10.; // variance for initialize gaussian on weights
 int kbvar = 2.; // variance for initialize gaussian on biases
+float l2reg = 0.005; //L2 regularization term (min value: 0.001)
 
 int alpha = 1; //learning rate
 
 int reset_val = 0; // k-value that actually results in neutral network (idk why this is not 0)
-
-int L2reg_thresh = 60; //k-value (absolute val) at which point L2 regularization turns on (push you back to 0)
 
 // --------------------- PINS --------------------- 
 // globals
@@ -268,11 +267,33 @@ void initialize_uni(){
 void update(){
   for (int ei = 0; ei < 5; ei++){
 
+    int l2term = compute_L2(kvals[ei]);
+
     // learning rule
-    int dk = alpha*((DnodeA[ei]*DnodeB[ei]) - (RnodeA[ei]*RnodeB[ei]));
+    int dk = alpha*((DnodeA[ei]*DnodeB[ei]) - (RnodeA[ei]*RnodeB[ei])) + l2term;
 
     moveEdge(ei, dk);
     delayMicroseconds(100);
+  }
+}
+
+int compute_L2(int kval){
+  int kcomp = int(float(abs(kval))*l2reg*1000.);
+  int randcomp = random(1000);
+  if (kcomp>randcomp){
+    return -1*sgn(kval);
+  }
+  else{
+    return 0;
+  }
+}
+
+int sgn(int x){
+  if (x >= 0){
+    return 1;
+  }
+  else{
+    return -1;
   }
 }
 
@@ -455,5 +476,11 @@ void receive_event(int howMany){
     randomSeed(val);
     Serial.print("seed: ");
     Serial.println(val);
+  }
+  if (message == 'L'){
+    int val = Wire.read();
+    l2reg = val/1000.;
+    Serial.print("l2reg: ");
+    Serial.println(l2reg);
   }
 }
