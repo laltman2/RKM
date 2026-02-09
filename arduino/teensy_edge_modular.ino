@@ -3,18 +3,31 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
-// --------------------- INFO ABOUT EDGES ---------------------
+// --------------------- BOARD INFO ---------------------
+// set this based on board setup and network structure
+
+// board I2C address
+const int wireNum = 1;
+
+//edges
 String edgeNames[5] = {"HB0", "VB0", "HB1", "W01", "W00"}; //name your edges (optional)
 bool isWeight[5] = {0,0,0,1,1}; //is each edge a weight (1) or a bias (0)?
-// (changes depending on network structure)
+bool isVconn[5] = {0,1,0,1,1}; //is each edge connected to a visible node (1) or not (0)?
 // B1: HB0
 // B2: VB0
 // B3: HB1
 // W1: W01
 // W2: W00
 
+// nodes
+const int VbarApins[5] = {2,4,6,8,10}; //abar, abar, abar, v0bar, v0bar
+const int VbarBpins[5] = {3,5,7,9,11}; //h0bar, v0bar, h1bar, h1bar, h0bar
+// abar: 2,4,6
+// v0bar: 5,8,10
+// h0bar: 3,11
+// h1bar: 7,9
+
 // --------------------- I2C STUFF ---------------------
-const int wireNum = 1;
 const int nBytes = 50;
 int which_ei;
 String last_read;
@@ -28,8 +41,10 @@ const int digipot_delay_time = 10; // before/after moving digipot clicks
 int k_constrain = 128; // prevent k from going to very high conductance values
 int k_init_constrain = 128; //prevent k from being initialized to very high conductance values
 int kwvar = 10.; // variance for initialize gaussian on weights
-int kbvar = 2.; // variance for initialize gaussian on biases
-float l2reg = 0.005; //L2 regularization term (min value: 0.001)
+int kbvar = 2.; // value for initialize gaussian on biases
+// FIX THIS LATER
+int l2reg = 1; //L2 regularization term (divided by maxl2reg)
+int maxl2reg = 10000; //sets the scale of L2 regularization
 
 int alpha = 1; //learning rate
 
@@ -42,15 +57,6 @@ const int recordRpin = 16;
 const int updatepin = 15;
 // const int batchRecpin = 14;
 // also SCL and SDA pins (19/18) should be used
-
-// nodes
-// (changes depending on network structure)
-const int VbarApins[5] = {2,4,6,8,10}; //abar, abar, abar, v0bar, v0bar
-const int VbarBpins[5] = {3,5,7,9,11}; //h0bar, v0bar, h1bar, h1bar, h0bar
-// abar: 2,4,6
-// v0bar: 5,8,10
-// h0bar: 3,11
-// h1bar: 7,9
 
 // edges
 const int UDpospins[5] = {28, 30, 22, 39, 35};
@@ -254,7 +260,14 @@ void initialize_uni(){
       randval = random(-1*kwvar, kwvar);
     }
     else{
-      randval = random(-1*kbvar, kbvar);
+      bool isV = isVconn[i];
+      if (isV){
+        // randval = random(-1*kbvar, kbvar);
+        randval = kbvar;
+      }
+      else{
+        randval = 0;
+      }
     }
 
     int kval = int(round(randval));
@@ -278,8 +291,8 @@ void update(){
 }
 
 int compute_L2(int kval){
-  int kcomp = int(float(abs(kval))*l2reg*1000.);
-  int randcomp = random(1000);
+  int kcomp = int(abs(kval)*l2reg);
+  int randcomp = random(maxl2reg);
   if (kcomp>randcomp){
     return -1*sgn(kval);
   }
@@ -479,8 +492,14 @@ void receive_event(int howMany){
   }
   if (message == 'L'){
     int val = Wire.read();
-    l2reg = val/1000.;
+    l2reg = val;
     Serial.print("l2reg: ");
     Serial.println(l2reg);
+  }
+  if (message == 'M'){
+    int val = Wire.read();
+    maxl2reg = val;
+    Serial.print("maxl2reg: ");
+    Serial.println(maxl2reg);
   }
 }
