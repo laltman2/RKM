@@ -52,6 +52,9 @@ const int storeMempin = 25;
 
 const int aBarpin = 53; //always output digital 1
 
+// switch between noisy and deterministic digitization
+const int detpin = 23;
+
 // nodes (local)
 // const int clampValpins[maxNode] = {53, 51};
 // later this will be replaced with one clamp value and a multiplexer
@@ -76,6 +79,7 @@ int testidx[numtest];
 int randomperm[numtrain];
 
 int alpha = 1;
+int detInf=0; //evaluate reconstruction MSE using noisy (0) or deterministic (1) comparator
 
 //  --------------------- VARIABLES --------------------- 
 int clampVals[numV];
@@ -111,6 +115,9 @@ void setup() {
 
   pinMode(aBarpin, OUTPUT);
   digitalWrite(aBarpin, 1);
+
+  pinMode(detpin, OUTPUT);
+  digitalWrite(detpin, 0);
 
   analogReadResolution(12);
 
@@ -303,6 +310,16 @@ void loop() {
     sendMessageToPython("finished");
   }
 
+  if (message == "L2"){
+    int val = Serial.readStringUntil(';').toInt(); // edge index
+    for (int i = 0; i < numBoards; i++){
+      int add = ebAddress[i];
+      set_request(add, 'L', val);
+    }
+    sendMessageWithVarToPython("L2", val);
+    sendMessageToPython("finished");
+  }
+
   if (message == "fb"){ 
     int val = Serial.readStringUntil(';').toInt();
     digitalWrite(FBpin, val);
@@ -361,6 +378,22 @@ void loop() {
       digitalWrite(updatepin, 0);
       sendMessageToPython("finished");
     }
+  }
+
+  if (message == "det"){ 
+    int val = Serial.readStringUntil(';').toInt();
+    digitalWrite(detpin, val);
+    // Serial.print("FB = ");
+    // Serial.println(val);
+    sendMessageWithVarToPython("det", val);
+    sendMessageToPython("finished");
+  }
+
+  if (message == "detinf"){ 
+    int val = Serial.readStringUntil(';').toInt();
+    detInf = val;
+    sendMessageWithVarToPython("detInf", val);
+    sendMessageToPython("finished");
   }
 
   if (message == "alpha"){ 
@@ -514,6 +547,22 @@ void train(int numepochs){
 }
 
 void test_reconstruction(){
+    if (detInf){
+      digitalWrite(detpin, 1);
+      delayMicroseconds(other_delay);
+      sendMessageToPython("reconstruction_deterministic");
+      for (int j = 0; j < numtest; j++){
+        sendMessageWithVarToPython("testidx", j);
+        clampVals[0] = dataset[testidx[j]][0];
+        clampVals[1] = dataset[testidx[j]][1];
+        // send1DArrayToPython("Vtest", clampVals, 2);
+        reconstruct();
+        // send1DArrayToPython("Vrecon", Vbar, 2);
+      }
+    sendMessageToPython("finalizereconstructdet");
+    }
+    digitalWrite(detpin, 0);
+    delayMicroseconds(other_delay);
     sendMessageToPython("reconstruction");
     for (int j = 0; j < numtest; j++){
         sendMessageWithVarToPython("testidx", j);
