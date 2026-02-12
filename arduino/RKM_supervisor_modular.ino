@@ -79,6 +79,7 @@ int testidx[numtest];
 int randomperm[numtrain];
 
 int alpha = 1;
+int measureEvery = 1;
 int detInf=0; //evaluate reconstruction MSE using noisy (0) or deterministic (1) comparator
 
 //  --------------------- VARIABLES --------------------- 
@@ -320,6 +321,16 @@ void loop() {
     sendMessageToPython("finished");
   }
 
+   if (message == "L2max"){
+    int val = Serial.readStringUntil(';').toInt(); // edge index
+    for (int i = 0; i < numBoards; i++){
+      int add = ebAddress[i];
+      set_request(add, 'M', val);
+    }
+    sendMessageWithVarToPython("L2max", val);
+    sendMessageToPython("finished");
+  }
+
   if (message == "fb"){ 
     int val = Serial.readStringUntil(';').toInt();
     digitalWrite(FBpin, val);
@@ -403,6 +414,13 @@ void loop() {
     sendMessageToPython("finished");
   }
 
+    if (message == "measureEvery"){ 
+    int mese = Serial.readStringUntil(';').toInt();
+    measureEvery = mese;
+    sendMessageWithVarToPython("measureEvery", measureEvery);
+    sendMessageToPython("finished");
+  }
+
   if (message == "clamp"){ 
     // rewrite this
     int localvals[maxNode] = {};
@@ -436,7 +454,7 @@ void loop() {
       int cvn = Serial.readStringUntil(';').toInt();
       clampVals[nn] = cvn;
     }
-    R_state();
+    R_state(1);
     sendMessageToPython("finished");
   }
 
@@ -446,19 +464,19 @@ void loop() {
       int cvn = Serial.readStringUntil(';').toInt();
       clampVals[nn] = cvn;
     }
-    R_state_f1(1);
+    R_state_f1(1,1);
     sendMessageToPython("finished");
   }
 
   if (message == "Rstateb1"){
     usePrev = 1;
-    R_state_b1(1);
+    R_state_b1(1,1);
     sendMessageToPython("finished");
   }
 
   if (message == "Rstatef2"){
     usePrev = 1;
-    R_state_f1(1);
+    R_state_f1(1,1);
     sendMessageToPython("finished");
   }
 
@@ -506,11 +524,20 @@ void train(int numepochs){
 
   usePrev = 0;
   int trainingstep = 0;
+  int mstep = 0;
+  int aRecord = 0;
   for (int epoch = 0; epoch < numepochs; epoch++){
     get_random_permutation(numtest);
+    mstep++;
+
+    if (mstep == measureEvery){
+      aRecord = 1;
+    }
+    else{
+      aRecord = 0;
+    }
+
     for (int pi = 0; pi < numtrain; pi++){
-      sendMessageWithVarToPython("epoch", epoch);
-      sendMessageWithVarToPython("trainingstep", trainingstep);
       // fix later
       // int trainidx = orderings[perm][pi];
       int trainidx = randomperm[pi];
@@ -525,7 +552,8 @@ void train(int numepochs){
         clampVals[vi] = Vinit[vi];
       }
 
-      R_state();
+      sendMessageWithVarToPython("aRecord", aRecord);
+      R_state(aRecord);
 
       // update
       for (int al = 0; al < alpha; al++){
@@ -535,13 +563,16 @@ void train(int numepochs){
         digitalWrite(updatepin, 0);
         delayMicroseconds(other_delay);
       }
-
+      trainingstep ++;
+  }
+  if (mstep == measureEvery){
+      mstep = 0;
+      sendMessageWithVarToPython("epoch", epoch);
+      // sendMessageWithVarToPython("trainingstep", trainingstep);
       full_measurement(1);
-
       test_reconstruction();
       delayMicroseconds(100);
       sendMessageToPython("finalize");
-      trainingstep ++;
   }
   }
 }
@@ -719,7 +750,7 @@ void D_state(){
   sendMessageToPython("all triggers reset");
 }
 
-void R_state_f1(int record){
+void R_state_f1(int record, int analogRecord){
 
   digitalWrite(readMempin, 0);
   delayMicroseconds(other_delay);
@@ -751,8 +782,10 @@ void R_state_f1(int record){
   delayMicroseconds(trigger_delay);
   sendMessageToPython("readMem triggered");
 
-  // analog_measurement(1, nmestimes); //take analog measurement of V nodes
-  analog_measurement(0, nmestimes); //take analog measurement of H nodes
+  if (analogRecord){
+    // analog_measurement(1, nmestimes); //take analog measurement of V nodes
+    analog_measurement(0, nmestimes); //take analog measurement of H nodes
+  }
 
   if (record){
     // record digitized values in edge MCC
@@ -776,7 +809,7 @@ void R_state_f1(int record){
   sendMessageToPython("all triggers reset");
 }
 
-void R_state_b1(int record){
+void R_state_b1(int record, int analogRecord){
   digitalWrite(readMempin, 0);
   delayMicroseconds(other_delay);
   digitalWrite(recordRpin, 0);
@@ -799,8 +832,10 @@ void R_state_b1(int record){
   delayMicroseconds(trigger_delay);
   sendMessageToPython("readMem triggered");
 
-  analog_measurement(1, nmestimes); //take analog measurement of V nodes
-  // analog_measurement(0, nmestimes); //take analog measurement of H nodes
+  if (analogRecord){
+    analog_measurement(1, nmestimes); //take analog measurement of V nodes
+    // analog_measurement(0, nmestimes); //take analog measurement of H nodes
+  }
 
   if (record){
     // record digitized values in edge MCC
@@ -929,12 +964,12 @@ void R_state_b1(int record){
 //   analog_measurement(0, nmestimes); // take analog measurement of H nodes
 // }
 
-void R_state(){
-  R_state_f1(0);
+void R_state(int analogRecord){
+  R_state_f1(0,0);
   usePrev = 1;
-  R_state_b1(0);
+  R_state_b1(0,analogRecord);
   usePrev = 1;
-  R_state_f1(1);
+  R_state_f1(1,analogRecord);
 }
 
 // --------------------- Measurement --------------------- 
