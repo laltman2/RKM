@@ -141,6 +141,7 @@ class ReadWrite:
         savedict = {}
         listodicts = []
         reconstructing = False
+        reconstructing_det = False
         idx = 0
         Vtest = []
         Vrecon = []
@@ -172,6 +173,28 @@ class ReadWrite:
                 else:
 #                     newvarname = varname + "_{}".format(trial)
                     savedict[varname] = val
+
+            if reconstructing_det:
+                if varname == "testidx":
+                    idx = val
+                
+                elif varname == "finalizereconstructdet":
+                    #print("Finished Reconstructing det")
+                    reconstructing_det = False
+                    idx=0
+                    savedict['Vtest_det'] = Vtest
+                    savedict['Vrecon_det'] = Vrecon
+                    #print(savedict)
+                    Vtest = []
+                    Vrecon = []
+                    
+                elif varname == "Vtest":
+                    Vtest.append(val)
+                elif varname == "Vrecon":
+                    Vrecon.append(val)
+                else:
+#                     newvarname = varname + "_{}".format(trial)
+                    savedict[varname] = val
             
            
             elif "finished" in varname:
@@ -179,9 +202,15 @@ class ReadWrite:
                 
             elif varname == "reconstruction":
                 reconstructing = True
+
+            elif varname == "reconstruction_deterministic":
+               # print("Reconstructing det")
+                reconstructing_det = True
                 
 
             elif varname == "finalize":
+               # print('finalize epoch')
+                #print(savedict)
                 listodicts.append(savedict)
                 savedict={}
             else:
