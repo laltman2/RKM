@@ -1,28 +1,28 @@
 #include <Wire.h>
 
 //  --------------------- NETWORK INFO --------------------- 
-const int numV = 2; // number of visible nodes
-const int numH = 2; // number of hidden nodes
+const int numV = 1; // number of visible nodes
+const int numH = 1; // number of hidden nodes
 const int maxNode = max(numV, numH); // maximum number of hidden/visible nodes (number of node boards)
 const int numE = numV * numH + numV + numH; // number of edges
 
 // Node clamping pins
-const int clampValpins[maxNode] = {53, 51};
+const int clampValpins[maxNode] = {53};
 
 // Node analog measurement pins:
-const int analogVpins[numV] = {A1, A2};
-const int analogHpins[numH] = {A0, A3};
-const int analogzeroPin = A4;
+const int analogVpins[numV] = {A1};
+const int analogHpins[numH] = {A2};
+const int analogzeroPin = A0;
 
 // Edge board I2C Addresses
 const int numBoards = ceil(float(numE)/5.); // 5 edges per board (number of edge boards)
-int ebAddress[numBoards] = {1, 2}; // I2C addresses of all boards
+int ebAddress[numBoards] = {1}; // I2C addresses of all boards
 
 // Edge Information
-String edgeNames[numE] = {"BV0", "BV1", "BH0", "BH1", "W00", "W01", "W10", "W11"}; // names of edges 
-bool isWeight[numE] = {0,0,0,0,1,1,1,1}; // are edges weights (1) or biases (0)
-int ebA[numE] = {1,2,1,1,1,1,2,2}; // board address of each edge
-int ebNum[numE] = {1,0,0,2,4,3,4,3}; // index of edge within each board
+String edgeNames[numE] = {"BV0", "BH0", "W00"}; // names of edges 
+bool isWeight[numE] = {0,0,1}; // are edges weights (1) or biases (0)
+int ebA[numE] = {1,1,1}; // board address of each edge
+int ebNum[numE] = {0,2,1}; // index of edge within each board
 
 // addressing location of visible nodes
 // there are numV*numH A node measurements (weights) and numV B node measurements (V bias)
@@ -72,8 +72,8 @@ String divider = ":";
 int nmestimes = 5; // how many times to measure analog values
 
 //  --------------------- TRAINING INFO --------------------- 
-const int numtrain = 2; // number of training data points
-int dataset[numtrain][numV] = {{1,0}, {0,1}};
+const int numtrain = 1; // number of training data points
+int dataset[numtrain][numV] = {{0}};
 const int numtest = 20; // number of test iterations (cycling through all datapoints)
 int testidx[numtest];
 int randomperm[numtrain];
@@ -178,6 +178,10 @@ void setup() {
 
 void loop() {
   String message = Serial.readStringUntil(';');
+
+  if (message == "ps"){
+    print_status();
+  }
 
   if (message == "mvtst"){
     int val = Serial.readStringUntil(';').toInt();
@@ -508,6 +512,28 @@ void loop() {
 }
 
 // --------------------- FUNCTIONS --------------------- 
+
+void print_status(){
+  sendMessageToPython("sending edge type and index");
+  for (int i = 0; i < numE; i++){
+    String ename = edgeNames[i];
+    int iW = isWeight[i];
+
+    if (iW){
+      // atoi(ename[1]);
+      sendMessageWithVarToPython("W", i);
+    }
+    else{
+      if (ename[1] == 'V'){
+        sendMessageWithVarToPython("BV", i);
+      }
+      else if (ename[1]=='H') {
+        sendMessageWithVarToPython("BH", i);
+      }
+    }
+  }
+  sendMessageToPython("finished");
+}
 
 void train(int numepochs){
 
@@ -1042,8 +1068,11 @@ void analog_measurement(int isV, int ntimes){
 // --------------------- I2C send/receive --------------------- 
 
 void set_request(int address, byte rq, int val){
+  // delay(500);
   // sets the piece of data to be requested from teensy
   byte ei = val & 0xFF;
+  // Serial.print("ei: ");
+  // Serial.println(ei, BIN);
   Wire.beginTransmission(address);  
   Wire.write(rq);                                              
   Wire.write(ei);                                                    
@@ -1053,6 +1082,7 @@ void set_request(int address, byte rq, int val){
 }
 
 void get_request(int address){
+  // delay(500);
   Wire.requestFrom(address, 3);
   byte a, b, c;
   c = Wire.read();

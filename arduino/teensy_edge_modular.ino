@@ -1,5 +1,6 @@
-#include <Gaussian.h>
-#include <Wire.h>
+// #include <Gaussian.h>
+// #include <Wire.h>
+#include <i2c_driver_wire.h>
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
@@ -10,9 +11,9 @@
 const int wireNum = 1;
 
 //edges
-String edgeNames[5] = {"HB0", "VB0", "HB1", "W01", "W00"}; //name your edges (optional)
-bool isWeight[5] = {0,0,0,1,1}; //is each edge a weight (1) or a bias (0)?
-bool isVconn[5] = {0,1,0,1,1}; //is each edge connected to a visible node (1) or not (0)?
+String edgeNames[5] = {"BV0", "W00", "BH0", "NA", "NA"}; //name your edges (optional)
+bool isWeight[5] = {0,1,0,0,0}; //is each edge a weight (1) or a bias (0)?
+bool isVconn[5] = {1,1,0,0,0}; //is each edge connected to a visible node (1) or not (0)?
 // B1: HB0
 // B2: VB0
 // B3: HB1
@@ -20,8 +21,8 @@ bool isVconn[5] = {0,1,0,1,1}; //is each edge connected to a visible node (1) or
 // W2: W00
 
 // nodes
-const int VbarApins[5] = {2,4,6,8,10}; //abar, abar, abar, v0bar, v0bar
-const int VbarBpins[5] = {3,5,7,9,11}; //h0bar, v0bar, h1bar, h1bar, h0bar
+const int VbarApins[5] = {2,4,6,8,10}; //abar, v0bar, abar, na, na
+const int VbarBpins[5] = {3,5,7,9,11}; //v0bar, h0bar, h0bar, na, na
 // abar: 2,4,6
 // v0bar: 5,8,10
 // h0bar: 3,11
@@ -225,29 +226,29 @@ void reset_to_val(int val){
   }
 }
 
-void initialize_norm(){
-  Gaussian gw(reset_val, kwvar);
-  Gaussian gb(reset_val, kbvar);
+// void initialize_norm(){
+//   Gaussian gw(reset_val, kwvar);
+//   Gaussian gb(reset_val, kbvar);
 
-  reset_to_0();
+//   reset_to_0();
 
-  for (int i = 0; i < 5; i++){
-    bool isW = isWeight[i];
-    double randval;
+//   for (int i = 0; i < 5; i++){
+//     bool isW = isWeight[i];
+//     double randval;
 
-    if (isW){
-      randval = gw.random();
-    }
-    else{
-      randval = gb.random();
-    }
+//     if (isW){
+//       randval = gw.random();
+//     }
+//     else{
+//       randval = gb.random();
+//     }
 
-    int kval = int(round(randval));
-    kval = constrain(kval, -1*k_init_constrain, k_init_constrain);
+//     int kval = int(round(randval));
+//     kval = constrain(kval, -1*k_init_constrain, k_init_constrain);
 
-    moveEdge(i, kval);
-  }
-}
+//     moveEdge(i, kval);
+//   }
+// }
 
 void initialize_uni(){
   reset_to_0();
@@ -428,22 +429,25 @@ void receive_event(int howMany){
     last_read = "k";
     byte ei = Wire.read();
     which_ei = ei;
+    Serial.print("k, ");
     Serial.print("which_ei: ");
-    Serial.println(which_ei);
+    Serial.println(which_ei, BIN);
   }
   if (message == 'A'){ //change index to be sent over next
     last_read = "a";
     byte ei = Wire.read();
     which_ei = ei;
+    Serial.print("a, ");
     Serial.print("which_ei: ");
-    Serial.println(which_ei);
+    Serial.println(which_ei, BIN);
   }
   if (message == 'B'){ //change index to be sent over next
     last_read = "b";
     byte ei = Wire.read();
     which_ei = ei;
+    Serial.print("b, ");
     Serial.print("which_ei: ");
-    Serial.println(which_ei);
+    Serial.println(which_ei, BIN);
   }
   if (message == 'R'){
     reset_to_val(reset_val);
@@ -456,10 +460,14 @@ void receive_event(int howMany){
   }
   if (message == 'U'){
     byte ei = Wire.read();
+    Serial.print("up ");
+    Serial.println(ei);
     moveEdge(ei, 20);
   }
   if (message == 'D'){
     byte ei = Wire.read();
+    Serial.print("down ");
+    Serial.println(ei);
     moveEdge(ei, -20);
   }
   if (message == 'V'){
