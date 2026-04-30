@@ -14,19 +14,15 @@ const int wireNum = 1;
 String edgeNames[5] = {"BV0", "W00", "BH0", "NA", "NA"}; //name your edges (optional)
 bool isWeight[5] = {0,1,0,0,0}; //is each edge a weight (1) or a bias (0)?
 bool isVconn[5] = {1,1,0,0,0}; //is each edge connected to a visible node (1) or not (0)?
-// B1: HB0
-// B2: VB0
-// B3: HB1
-// W1: W01
-// W2: W00
+
+// left or (A) side of bias is abar
+// right or (B) side of bias is node
+// left or (A) side of weight is visible node
+// right or (B) side of weight is hidden node
 
 // nodes
 const int VbarApins[5] = {2,4,6,8,10}; //abar, v0bar, abar, na, na
 const int VbarBpins[5] = {3,5,7,9,11}; //v0bar, h0bar, h0bar, na, na
-// abar: 2,4,6
-// v0bar: 5,8,10
-// h0bar: 3,11
-// h1bar: 7,9
 
 // --------------------- I2C STUFF ---------------------
 const int nBytes = 50;
