@@ -10,9 +10,10 @@ const int numE = numV * numH + numV + numH; // number of edges
 const int clampValpins[maxNode] = {53};
 
 // Node analog measurement pins:
-const int analogVpins[numV] = {A1};
-const int analogHpins[numH] = {A2};
-const int analogzeroPin = A0;
+const int analogVpins[numV] = {A2};
+const int analogHpins[numH] = {A3};
+const int analogzeroPin = A1;
+const int analogTempPin = A0;
 
 // Edge board I2C Addresses
 const int numBoards = ceil(float(numE)/5.); // 5 edges per board (number of edge boards)
@@ -105,6 +106,9 @@ int RnodeB[numE] = {0};
 //  ------------------------------------------------------- 
 
 void setup() {
+  pinMode(testUDpin, OUTPUT);
+  pinMode(testCLKpin, OUTPUT);
+
   pinMode(recordDpin, OUTPUT);
   pinMode(recordRpin, OUTPUT);
   pinMode(updatepin, OUTPUT);
@@ -187,6 +191,7 @@ void loop() {
     int val = Serial.readStringUntil(';').toInt();
     moveDigipot(val, testUDpin, testCLKpin);
     sendMessageWithVarToPython("move test digi", val);
+    sendMessageToPython("finished");
   }
 
   if (message == "mes"){
@@ -197,6 +202,14 @@ void loop() {
   if (message == "ames"){
     int isv = Serial.readStringUntil(';').toInt(); // read V or H nodes
     analog_measurement(isv, nmestimes);
+    sendMessageToPython("finished");
+  }
+
+  if (message == "sampletemp"){
+    sendMessageToPython("sampling temperature signal");
+    int nmes = Serial.readStringUntil(';').toInt();
+    int delayt = Serial.readStringUntil(';').toInt();
+    sample_temp(nmes, delayt);
     sendMessageToPython("finished");
   }
 
@@ -1031,6 +1044,15 @@ void full_measurement(int report){
     send1DArrayToPython("RA", RnodeA, numE);
     send1DArrayToPython("RB", RnodeB, numE);
   }
+}
+
+void sample_temp(int nSamples, int delaytime){
+  int readVals[nSamples];
+  for (int nt = 0; nt < nSamples; nt++){
+    readVals[nt] = analogRead(analogTempPin);
+    delayMicroseconds(delaytime);
+  }
+  send1DArrayToPython("analogTemp", readVals, nSamples);
 }
 
 void analog_measurement(int isV, int ntimes){
