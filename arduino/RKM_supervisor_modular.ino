@@ -10,10 +10,11 @@ const int numE = numV * numH + numV + numH; // number of edges
 const int clampValpins[maxNode] = {53};
 
 // Node analog measurement pins:
-const int analogVpins[numV] = {A2};
-const int analogHpins[numH] = {A3};
-const int analogzeroPin = A1;
-const int analogTempPin = A0;
+const int analogVpins[numV] = {A3};
+const int analogHpins[numH] = {A4};
+const int analogzeroPin = A0;
+const int analogVTempPin = A1;
+const int analogHTempPin = A2;
 
 // Edge board I2C Addresses
 const int numBoards = ceil(float(numE)/5.); // 5 edges per board (number of edge boards)
@@ -28,16 +29,20 @@ int ebNum[numE] = {0,2,1}; // index of edge within each board
 // addressing location of visible nodes
 // there are numV*numH A node measurements (weights) and numV B node measurements (V bias)
 const int numVe = numV*numH + numV; // number of edges that connect to visible nodes
-int Veidx[numVe]; // indices of edges that connect to visible nodes
-int isAB[numVe]; // on which side do they connect to visible nodes?
-int whichV[numVe]; // which visible node do they connect to?
+const int Veidx[numVe] = {0, 2}; // indices of edges that connect to visible nodes
+const int isAB[numVe] = {1, 0}; // on which side do they connect to visible nodes?
+const int whichV[numVe] = {0, 0}; // which visible node do they connect to?
+
 
 // --------------------- PINS --------------------- 
 // I2C: SCL and SDA pins (21/20) should be used
 
-// testing an edge
-const int testUDpin = 15;
-const int testCLKpin = 14;
+// setting temperature wave
+const int VtempUDpin = 14;
+const int VtempCLKpin = 15;
+
+const int HtempUDpin = 16;
+const int HtempCLKpin = 17;
 
 // edges
 const int recordDpin = 42;
@@ -65,16 +70,17 @@ const int detpin = 23;
 
 // --------------------- CONSTANTS --------------------- 
 const int digipot_delay_time = 10; // before/after moving digipot clicks
-const int trigger_delay = 1000; //for the RC delay on readmem to catch up
-const int other_delay = 200; //just in case!
+const int trigger_delay = 10000; //for the RC delay on readmem to catch up
+const int other_delay = 500; //just in case!
 const int equil_delay = 1000; //for the network to equilibrate
+const int mes_delay = 1000; // I2C signal passing
 String buffer = "        ";
 String divider = ":";
 int nmestimes = 5; // how many times to measure analog values
 
 //  --------------------- TRAINING INFO --------------------- 
 const int numtrain = 1; // number of training data points
-int dataset[numtrain][numV] = {{0}};
+const int dataset[numtrain][numV] = {{0}};
 const int numtest = 20; // number of test iterations (cycling through all datapoints)
 int testidx[numtest];
 int randomperm[numtrain];
@@ -106,8 +112,11 @@ int RnodeB[numE] = {0};
 //  ------------------------------------------------------- 
 
 void setup() {
-  pinMode(testUDpin, OUTPUT);
-  pinMode(testCLKpin, OUTPUT);
+  pinMode(VtempUDpin, OUTPUT);
+  pinMode(VtempCLKpin, OUTPUT);
+
+  pinMode(HtempUDpin, OUTPUT);
+  pinMode(HtempCLKpin, OUTPUT);
 
   pinMode(recordDpin, OUTPUT);
   pinMode(recordRpin, OUTPUT);
@@ -148,7 +157,7 @@ void setup() {
   digitalWrite(updatepin, 0);
   delayMicroseconds(other_delay);
 
-  populate_Ves();
+  // populate_Ves();
 
   Wire.begin();                                                             
   Serial.begin(250000);
@@ -187,10 +196,19 @@ void loop() {
     print_status();
   }
 
-  if (message == "mvtst"){
+  if (message == "setvtemp"){
     int val = Serial.readStringUntil(';').toInt();
-    moveDigipot(val, testUDpin, testCLKpin);
-    sendMessageWithVarToPython("move test digi", val);
+    moveDigipot(-128, VtempUDpin, VtempCLKpin);
+    moveDigipot(val, VtempUDpin, VtempCLKpin);
+    sendMessageWithVarToPython("set Vtemp", val);
+    sendMessageToPython("finished");
+  }
+
+  if (message == "sethtemp"){
+    int val = Serial.readStringUntil(';').toInt();
+    moveDigipot(-128, HtempUDpin, HtempCLKpin);
+    moveDigipot(val, HtempUDpin, HtempCLKpin);
+    sendMessageWithVarToPython("set Htemp", val);
     sendMessageToPython("finished");
   }
 
@@ -209,7 +227,8 @@ void loop() {
     sendMessageToPython("sampling temperature signal");
     int nmes = Serial.readStringUntil(';').toInt();
     int delayt = Serial.readStringUntil(';').toInt();
-    sample_temp(nmes, delayt);
+    int isH = Serial.readStringUntil(';').toInt();
+    sample_temp(nmes, delayt, isH);
     sendMessageToPython("finished");
   }
 
@@ -452,8 +471,6 @@ void loop() {
 
   if (message == "Dstate"){ 
     // rewrite
-    // clampVals[0] = 1;
-    // clampVals[1] = 0;
     for (int nn = 0; nn < numV; nn++){
       int cvn = Serial.readStringUntil(';').toInt();
       clampVals[nn] = cvn;
@@ -465,8 +482,6 @@ void loop() {
   if (message == "Rstate"){ 
     // rewrite
     usePrev = 0;
-    // clampVals[0] = 1;
-    // clampVals[1] = 0;
     for (int nn = 0; nn < numV; nn++){
       int cvn = Serial.readStringUntil(';').toInt();
       clampVals[nn] = cvn;
@@ -517,6 +532,12 @@ void loop() {
     sendMessageToPython("finished");
   }
 
+  if (message == "testrecon"){
+    sendMessageToPython("test recon");
+    test_reconstruction();
+    sendMessageToPython("finished");
+  }
+
   if (message == "numprop"){
     numProp = Serial.readStringUntil(';').toInt();
     sendMessageWithVarToPython("numProp", numProp);
@@ -545,6 +566,31 @@ void print_status(){
       }
     }
   }
+
+  send1DArrayToPython("ebAddress", ebAddress, numBoards);
+
+  int proxyVeidx[numVe];
+  int proxyisAB[numVe];
+  int proxywhichV[numVe];
+  for (int vi = 0; vi < numVe; vi++){
+    proxyVeidx[vi] = Veidx[vi];
+    proxyisAB[vi] = isAB[vi];
+    proxywhichV[vi] = whichV[vi];
+  }
+
+  send1DArrayToPython("Veidx", proxyVeidx, numVe);
+  send1DArrayToPython("isAB", proxyisAB, numVe);
+  send1DArrayToPython("whichV", proxywhichV, numVe);
+
+  sendMessageWithVarToPython("numtrain", numtrain);
+  for (int i = 0; i < numtrain; i++){
+    int proxydata[numV];
+    for (int nn = 0; nn < numV; nn++){
+      proxydata[nn] = dataset[i][nn];
+    }
+    send1DArrayToPython("dataset", proxydata, numV);
+  }
+  send1DArrayToPython("testidx", testidx, numtest);
   sendMessageToPython("finished");
 }
 
@@ -555,7 +601,7 @@ void train(int numepochs){
   }
 
   for (int v=0; v < numV; v++){
-    Vinit[v] = random(2); //initialize random Vinits
+    Vinit[v] = random(2); //initialize Vinits to random bits
   }
 
   test_reconstruction(); //get initial test data reconstructions
@@ -623,8 +669,11 @@ void test_reconstruction(){
       sendMessageToPython("reconstruction_deterministic");
       for (int j = 0; j < numtest; j++){
         sendMessageWithVarToPython("testidx", j);
-        clampVals[0] = dataset[testidx[j]][0];
-        clampVals[1] = dataset[testidx[j]][1];
+        for (int nn = 0; nn < numV; nn++){
+          clampVals[nn] = dataset[testidx[j]][nn];
+        }
+        // clampVals[0] = dataset[testidx[j]][0];
+        // clampVals[1] = dataset[testidx[j]][1];
         // send1DArrayToPython("Vtest", clampVals, 2);
         reconstruct();
         // send1DArrayToPython("Vrecon", Vbar, 2);
@@ -636,9 +685,10 @@ void test_reconstruction(){
     sendMessageToPython("reconstruction");
     for (int j = 0; j < numtest; j++){
         sendMessageWithVarToPython("testidx", j);
-        clampVals[0] = dataset[testidx[j]][0];
-        clampVals[1] = dataset[testidx[j]][1];
-        // send1DArrayToPython("Vtest", clampVals, 2);
+        for (int nn = 0; nn < numV; nn++){
+          clampVals[nn] = dataset[testidx[j]][nn];
+        }
+        // send1DArrayToPython("Vtest", clampVals, numV);
         reconstruct();
         // send1DArrayToPython("Vrecon", Vbar, 2);
     }
@@ -665,8 +715,8 @@ void reconstruct(){
 
   for (int i = 0; i < numV; i ++){
     digitalWrite(clampValpins[i], clampVals[i]);
-    // delayMicroseconds(other_delay);
-    delayMicroseconds(10000);
+    delayMicroseconds(other_delay);
+    // delayMicroseconds(10000);
   }
 
   send1DArrayToPython("Vtest", clampVals, numV);
@@ -707,8 +757,8 @@ void reconstruct(){
   full_measurement(0);
 
   int reconstructed[numV];
-  for (int i = 0; i < numV; i++){
-    reconstructed[i] = -1; // initialize everything to -1
+  for (int nn = 0; nn < numV; nn++){
+    reconstructed[nn] = -1; // initialize everything to -1
   }
   for (int i = 0; i < numVe; i++){
     int AB = isAB[i];
@@ -727,7 +777,10 @@ void reconstruct(){
     }
     else{
       if (reconstructed[Vi] != localmes){
-        sendMessageToPython("something went wrong, measurements dont match"); //if it's not the first time, just chekc that measurements match each other
+        sendMessageToPython("something went wrong, measurements dont match"); //if it's not the first time, just check that measurements match each other
+        sendMessageWithVarToPython("previous", reconstructed[Vi]);
+        sendMessageWithVarToPython("current", localmes);
+        sendMessageWithVarToPython("Veindex", i);
       }
     }
   }
@@ -1025,7 +1078,7 @@ void full_measurement(int report){
     // sendMessageWithVarToPython("index", ei);
     for (int i = 0; i < 3; i++){
       set_request(add, RQs[i], ei);
-      delayMicroseconds(1000);
+      delayMicroseconds(mes_delay);
       // delay(1000);
       get_request(add);
       // delay(1000);
@@ -1046,10 +1099,19 @@ void full_measurement(int report){
   }
 }
 
-void sample_temp(int nSamples, int delaytime){
+void sample_temp(int nSamples, int delaytime, int isH){
   int readVals[nSamples];
+  int localPin;
+  if (isH){
+    sendMessageToPython("H temp");
+    localPin = analogHTempPin;
+  }
+  else{
+    sendMessageToPython("V temp");
+    localPin = analogVTempPin;
+  }
   for (int nt = 0; nt < nSamples; nt++){
-    readVals[nt] = analogRead(analogTempPin);
+    readVals[nt] = analogRead(localPin);
     delayMicroseconds(delaytime);
   }
   send1DArrayToPython("analogTemp", readVals, nSamples);
@@ -1242,23 +1304,33 @@ void get_random_permutation(int N){
   }
 }
 
-void populate_Ves(){
-  int vi = 0;
-  for (int i = 0; i < numE; i++){
-    if (edgeNames[i].startsWith("BV")){
-      Veidx[vi] = i;
-      isAB[vi] = 1;
-      whichV[vi] = edgeNames[i].substring(2).toInt();
-      vi++;
-    }
-    if (edgeNames[i].startsWith("W")){
-      Veidx[vi] = i;
-      isAB[vi] = 0;
-      whichV[vi] = edgeNames[i].substring(1,2).toInt();
-      vi++;
-    }
-  }
-  if (vi != numVe){
-    sendMessageToPython("error wrong number of Ve");
-  }
-}
+// void populate_Ves(){
+//   int vi = 0;
+//   for (int i = 0; i < numE; i++){
+//     if (edgeNames[i].startsWith("BV")){
+//       Veidx[vi] = i;
+//       isAB[vi] = 1;
+//       whichV[vi] = edgeNames[i].substring(2).toInt();
+//       vi++;
+//       // sendMessageToPython("BV");
+//       // sendMessageWithVarToPython("vi", vi);
+//       // sendMessageWithVarToPython("i", i);
+//       // sendMessageWithVarToPython("isAB", isAB[vi]);
+//       // sendMessageWithVarToPython("whichV", whichV[vi]);
+//     }
+//     if (edgeNames[i].startsWith("W")){
+//       Veidx[vi] = i;
+//       isAB[vi] = 0;
+//       whichV[vi] = edgeNames[i].substring(1,2).toInt();
+//       vi++;
+//       // sendMessageToPython("W");
+//       // sendMessageWithVarToPython("vi", vi);
+//       // sendMessageWithVarToPython("i", i);
+//       // sendMessageWithVarToPython("isAB", isAB[vi]);
+//       // sendMessageWithVarToPython("whichV", whichV[vi]);
+//     }
+//   }
+//   if (vi != numVe){
+//     sendMessageToPython("error wrong number of Ve");
+//   }
+// }
