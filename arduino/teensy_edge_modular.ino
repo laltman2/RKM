@@ -1,5 +1,5 @@
 // #include <Gaussian.h>
-// #include <Wire.h>
+//  #include <Wire.h>
 #include <i2c_driver_wire.h>
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -502,7 +502,7 @@ void receive_event(int howMany){
   }
   if (message == 'M'){
     int val = Wire.read();
-    maxl2reg = val;
+    maxl2reg = pow(10, val);
     Serial.print("maxl2reg: ");
     Serial.println(maxl2reg);
   }
