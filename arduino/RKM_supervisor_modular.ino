@@ -88,6 +88,7 @@ int randomperm[numtrain];
 int alpha = 1;
 int measureEvery = 1;
 int detInf=0; //evaluate reconstruction MSE using noisy (0) or deterministic (1) comparator
+int temp0 = 0; //if 1, train at true T=0 (deterministic)
 
 //  --------------------- VARIABLES --------------------- 
 int clampVals[numV];
@@ -443,6 +444,26 @@ void loop() {
     sendMessageToPython("finished");
   }
 
+  if (message == "zeroTtrain"){ 
+    // train at T=0 (use a0 as comparator signal)
+    // set detpin to 1
+    // turn detinf to 0
+    temp0 = 1;
+    digitalWrite(detpin, 1);
+    detInf = 0;
+    sendMessageWithVarToPython("temp0", temp0);
+    sendMessageToPython("finished");
+  }
+
+  if (message == "finiteTtrain"){ 
+    // train at finite temp (use triangle waves as comparator signal)
+    // set detpin to 0
+    temp0 = 0;
+    digitalWrite(detpin, 0);
+    sendMessageWithVarToPython("temp0", temp0);
+    sendMessageToPython("finished");
+  }
+
   if (message == "alpha"){ 
     int alf = Serial.readStringUntil(';').toInt();
     alpha = alf;
@@ -554,7 +575,6 @@ void print_status(){
     int iW = isWeight[i];
 
     if (iW){
-      // atoi(ename[1]);
       sendMessageWithVarToPython("W", i);
     }
     else{
@@ -569,28 +589,31 @@ void print_status(){
 
   send1DArrayToPython("ebAddress", ebAddress, numBoards);
 
-  int proxyVeidx[numVe];
-  int proxyisAB[numVe];
-  int proxywhichV[numVe];
-  for (int vi = 0; vi < numVe; vi++){
-    proxyVeidx[vi] = Veidx[vi];
-    proxyisAB[vi] = isAB[vi];
-    proxywhichV[vi] = whichV[vi];
-  }
+  sendMessageWithVarToPython("temp0", temp0);
+  sendMessageWithVarToPython("detinf", detInf);
 
-  send1DArrayToPython("Veidx", proxyVeidx, numVe);
-  send1DArrayToPython("isAB", proxyisAB, numVe);
-  send1DArrayToPython("whichV", proxywhichV, numVe);
+  // int proxyVeidx[numVe];
+  // int proxyisAB[numVe];
+  // int proxywhichV[numVe];
+  // for (int vi = 0; vi < numVe; vi++){
+  //   proxyVeidx[vi] = Veidx[vi];
+  //   proxyisAB[vi] = isAB[vi];
+  //   proxywhichV[vi] = whichV[vi];
+  // }
 
-  sendMessageWithVarToPython("numtrain", numtrain);
-  for (int i = 0; i < numtrain; i++){
-    int proxydata[numV];
-    for (int nn = 0; nn < numV; nn++){
-      proxydata[nn] = dataset[i][nn];
-    }
-    send1DArrayToPython("dataset", proxydata, numV);
-  }
-  send1DArrayToPython("testidx", testidx, numtest);
+  // send1DArrayToPython("Veidx", proxyVeidx, numVe);
+  // send1DArrayToPython("isAB", proxyisAB, numVe);
+  // send1DArrayToPython("whichV", proxywhichV, numVe);
+
+  // sendMessageWithVarToPython("numtrain", numtrain);
+  // for (int i = 0; i < numtrain; i++){
+  //   int proxydata[numV];
+  //   for (int nn = 0; nn < numV; nn++){
+  //     proxydata[nn] = dataset[i][nn];
+  //   }
+  //   send1DArrayToPython("dataset", proxydata, numV);
+  // }
+  // send1DArrayToPython("testidx", testidx, numtest);
   sendMessageToPython("finished");
 }
 
@@ -680,8 +703,10 @@ void test_reconstruction(){
       }
     sendMessageToPython("finalizereconstructdet");
     }
-    digitalWrite(detpin, 0);
-    delayMicroseconds(other_delay);
+    if (!temp0){
+      digitalWrite(detpin, 0);
+      delayMicroseconds(other_delay);
+    }
     sendMessageToPython("reconstruction");
     for (int j = 0; j < numtest; j++){
         sendMessageWithVarToPython("testidx", j);
