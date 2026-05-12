@@ -64,7 +64,8 @@ class ReadWrite:
             if msgtype == 'msg':
                 msg = messages[2]
                 if not suppress:
-                    print(msg)
+                    if ('finished' not in msg):
+                        print(msg)
                 return msg, None
             elif msgtype == 'msgvar':
                 varname = messages[2]
@@ -118,18 +119,23 @@ class ReadWrite:
             data = self.read_safe(timeoutval = timeoutval)
             if not data:
                 break    
-            varname, val = self.interpret(data, suppress)
+#             print(data)
+            try:
+                varname, val = self.interpret(data, suppress)
 
-            if varname == "sending data":
-                savedict = {}
+                if varname == "sending data":
+                    savedict = {}
 
-            elif "finished" in varname:
-                break
+                elif "finished" in varname:
+                    break
 
-            elif varname == "finalize":
-                break
-            else:
-                savedict[varname] = val
+                elif varname == "finalize":
+                    break
+                else:
+                    savedict[varname] = val
+            except:
+                print("Could not interpret: ")
+                print(data)
         return savedict
     
     
@@ -148,8 +154,12 @@ class ReadWrite:
         while data is not None:
             data = self.read_safe(timeoutval = timeoutval)
             if not data:
-                break    
-            varname, val = self.interpret(data, suppress=True)
+                break
+            try:
+                varname, val = self.interpret(data, suppress=True)
+            except:
+                print(data)
+                continue
             
             if varname == "epoch":
                 print(varname, val, end='\r')
