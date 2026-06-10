@@ -1,37 +1,91 @@
 #include <Wire.h>
 
+// Any variables with "*****" need to be modified along with network size/training task
+
 //  --------------------- NETWORK INFO --------------------- 
-const int numV = 1; // number of visible nodes
-const int numH = 1; // number of hidden nodes
+const int numV = 3; // number of visible nodes *****
+const int numH = 3; // number of hidden nodes *****
 const int maxNode = max(numV, numH); // maximum number of hidden/visible nodes (number of node boards)
 const int numE = numV * numH + numV + numH; // number of edges
 
 // Node clamping pins
-const int clampValpins[maxNode] = {53};
+const int clampValpins[maxNode] = {53, 47, 45}; // *****
+// clampVal0: 53
+// clampVal1: 47
+// clampVal2: 45
 
 // Node analog measurement pins:
-const int analogVpins[numV] = {A3};
-const int analogHpins[numH] = {A4};
+const int analogVpins[numV] = {A3, A5, A7}; // *****
+// aV0: A3
+// aV1: A5
+// aV2: A7
+const int analogHpins[numH] = {A4, A6, A8}; // *****
+// aH0: A4
+// aH1: A6
+// aH2: A8
 const int analogzeroPin = A0;
 const int analogVTempPin = A1;
 const int analogHTempPin = A2;
 
 // Edge board I2C Addresses
 const int numBoards = ceil(float(numE)/5.); // 5 edges per board (number of edge boards)
-int ebAddress[numBoards] = {1}; // I2C addresses of all boards
+int ebAddress[numBoards] = {1,2,3}; // I2C addresses of all boards *****
+// eb0: 1
+// eb1: 2
+// eb2: 3
 
 // Edge Information
-String edgeNames[numE] = {"BV0", "BH0", "W00"}; // names of edges 
-bool isWeight[numE] = {0,0,1}; // are edges weights (1) or biases (0)
-int ebA[numE] = {1,1,1}; // board address of each edge
-int ebNum[numE] = {0,2,1}; // index of edge within each board
+String edgeNames[numE] = {"BV0", "BV1", "BV2", 
+                          "BH0", "BH1", "BH2", 
+                          "W00", "W01", "W02", 
+                          "W10", "W11", "W12",
+                          "W20", "W21", "W22"}; // names of edges *****
+bool isWeight[numE] = {0,0,0,
+                       0,0,0,
+                       1,1,1,
+                       1,1,1,
+                       1,1,1}; // are edges weights (1) or biases (0) // *****
+int ebA[numE] = {1,2,3,
+                 1,2,3,
+                 1,1,1,
+                 2,2,2,
+                 3,3,3}; // board address of each edge // *****
+int ebNum[numE] = {0,0,0,
+                   2,2,2,
+                   1,3,4,
+                   3,1,4,
+                   3,4,1}; // index of edge within each board // *****
+// BV0: eb1, n0
+// BV1: eb2, n0
+// BV2: eb3, n0
+// BH0: eb1, n2
+// BH1: eb2, n2
+// BH2: eb3, n2
+// W00: eb1, n1
+// W01: eb1, n3
+// W02: eb1, n4
+// W10: eb2, n3
+// W11: eb2, n1
+// W12: eb2, n4
+// W20: eb3, n3
+// W21: eb3, n4
+// W22: eb3, n1
 
 // addressing location of visible nodes
 // there are numV*numH A node measurements (weights) and numV B node measurements (V bias)
 const int numVe = numV*numH + numV; // number of edges that connect to visible nodes
-const int Veidx[numVe] = {0, 2}; // indices of edges that connect to visible nodes
-const int isAB[numVe] = {1, 0}; // on which side do they connect to visible nodes?
-const int whichV[numVe] = {0, 0}; // which visible node do they connect to?
+const int Veidx[numVe] = {0,1,2,
+                          6,7,8,
+                          9,10,11,
+                          12,13,14}; // indices of edges that connect to visible nodes // *****
+const int isAB[numVe] = {1,1,1,
+                         0,0,0,
+                         0,0,0,
+                         0,0,0}; // on which side do they connect to visible nodes? // ***** 
+const int whichV[numVe] = {0,1,2,
+                           0,0,0,
+                           1,1,1,
+                           2,2,2}; // which visible node do they connect to? // *****
 
 
 // --------------------- PINS --------------------- 
@@ -70,18 +124,21 @@ const int detpin = 23;
 
 // --------------------- CONSTANTS --------------------- 
 const int digipot_delay_time = 10; // before/after moving digipot clicks
-const int trigger_delay = 10000; //for the RC delay on readmem to catch up
-const int other_delay = 500; //just in case!
-const int equil_delay = 1000; //for the network to equilibrate
+const int trigger_delay = 1000; //for the RC delay on readmem to catch up (was 10000)
+const int other_delay = 100; //just in case! (was 500)
+const int equil_delay = 200; //for the network to equilibrate (was 1000)
 const int mes_delay = 1000; // I2C signal passing
 String buffer = "        ";
 String divider = ":";
 int nmestimes = 5; // how many times to measure analog values
 
 //  --------------------- TRAINING INFO --------------------- 
-const int numtrain = 1; // number of training data points
-const int dataset[numtrain][numV] = {{0}};
-const int numtest = 20; // number of test iterations (cycling through all datapoints)
+const int numtrain = 4; // number of training data points // *****
+const int dataset[numtrain][numV] = {{0,0,0},
+                                     {0,1,1},
+                                     {1,0,1},
+                                     {1,1,0}}; // *****
+const int numtest = 40; // number of test iterations (cycling through all datapoints) // *****
 int testidx[numtest];
 int randomperm[numtrain];
 
@@ -630,12 +687,14 @@ void train(int numepochs){
   test_reconstruction(); //get initial test data reconstructions
   sendMessageToPython("finalize");
 
+
+  // sendMessageWithVarToPython("epoch", -1);
   usePrev = 0;
   int trainingstep = 0;
   int mstep = 0;
   int aRecord = 0;
   for (int epoch = 0; epoch < numepochs; epoch++){
-    get_random_permutation(numtest);
+    get_random_permutation(numtrain);
     mstep++;
 
     if (mstep == measureEvery){
@@ -805,7 +864,7 @@ void reconstruct(){
         sendMessageToPython("something went wrong, measurements dont match"); //if it's not the first time, just check that measurements match each other
         sendMessageWithVarToPython("previous", reconstructed[Vi]);
         sendMessageWithVarToPython("current", localmes);
-        sendMessageWithVarToPython("Veindex", i);
+        sendMessageWithVarToPython("Veidx", Vei);
       }
     }
   }
