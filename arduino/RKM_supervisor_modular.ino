@@ -91,6 +91,11 @@ const int whichV[numVe] = {0,1,2,
 // --------------------- PINS --------------------- 
 // I2C: SCL and SDA pins (21/20) should be used
 
+// testing digipots
+const int testUDpin = 9;
+const int testCLKpin = 8;
+const int testDigiOutpin = A11;
+
 // setting temperature wave
 const int VtempUDpin = 14;
 const int VtempCLKpin = 15;
@@ -125,7 +130,7 @@ const int detpin = 23;
 // --------------------- CONSTANTS --------------------- 
 const int digipot_delay_time = 10; // before/after moving digipot clicks
 const int trigger_delay = 1000; //for the RC delay on readmem to catch up (was 10000)
-const int other_delay = 100; //just in case! (was 500)
+const int other_delay = 500; //just in case! (was 500)
 const int equil_delay = 200; //for the network to equilibrate (was 1000)
 const int mes_delay = 1000; // I2C signal passing
 String buffer = "        ";
@@ -135,10 +140,16 @@ int nmestimes = 5; // how many times to measure analog values
 //  --------------------- TRAINING INFO --------------------- 
 const int numtrain = 4; // number of training data points // *****
 const int dataset[numtrain][numV] = {{0,0,0},
-                                     {0,1,1},
-                                     {1,0,1},
-                                     {1,1,0}}; // *****
-const int numtest = 40; // number of test iterations (cycling through all datapoints) // *****
+                                     {0,0,1},
+                                     {0,1,0},
+                                     {1,1,1}};
+
+
+// {{0,0,0},
+//                                      {0,1,0},
+//                                      {1,0,0},
+//                                      {1,1,1}}; // *****
+const int numtest = numtrain*10; // number of test iterations (cycling through all datapoints) // *****
 int testidx[numtest];
 int randomperm[numtrain];
 
@@ -170,6 +181,9 @@ int RnodeB[numE] = {0};
 //  ------------------------------------------------------- 
 
 void setup() {
+  pinMode(testUDpin, OUTPUT);
+  pinMode(testCLKpin, OUTPUT);
+
   pinMode(VtempUDpin, OUTPUT);
   pinMode(VtempCLKpin, OUTPUT);
 
@@ -252,6 +266,15 @@ void loop() {
 
   if (message == "ps"){
     print_status();
+  }
+
+  if (message == "mvtst"){
+    int val = Serial.readStringUntil(';').toInt();
+    moveDigipot(val, testUDpin, testCLKpin);
+    sendMessageWithVarToPython("moved test digi", val);
+    sendMessageWithVarToPython("analogZero", analogRead(analogzeroPin));
+    sendMessageWithVarToPython("digiOut", analogRead(testDigiOutpin));
+    sendMessageToPython("finished");
   }
 
   if (message == "setvtemp"){
@@ -945,7 +968,7 @@ void R_state_f1(int record, int analogRecord){
 
   if (!usePrev){
     // clamp values (only used if useprev = 0)
-    for (int i = 0; i < 2; i ++){
+    for (int i = 0; i < numV; i ++){
       digitalWrite(clampValpins[i], clampVals[i]);
       delayMicroseconds(other_delay);
     }
@@ -959,7 +982,6 @@ void R_state_f1(int record, int analogRecord){
   sendMessageToPython("readMem triggered");
 
   if (analogRecord){
-    // analog_measurement(1, nmestimes); //take analog measurement of V nodes
     analog_measurement(0, nmestimes); //take analog measurement of H nodes
   }
 
@@ -1035,110 +1057,6 @@ void R_state_b1(int record, int analogRecord){
   sendMessageToPython("all triggers reset");
 }
 
-
-// void R_state(){
-//   // reset triggers
-//   digitalWrite(readMempin, 0);
-//   delayMicroseconds(trigger_delay);
-//   digitalWrite(recordRpin, 0);
-//   delayMicroseconds(other_delay);
-//   digitalWrite(storeMempin, 0);
-//   delayMicroseconds(other_delay);
-//   sendMessageToPython("all triggers reset");
-
-//   for (int i = 0; i < numProp; i++){
-//     // Serial.print("prop = ");
-//     // Serial.println(i);
-//     sendMessageWithVarToPython("prop", i);
-
-//     for (int j = 0; j < 2; j++){
-//       // do one forward, one backward per propagation step
-//       digitalWrite(FBpin, j);
-//       delayMicroseconds(other_delay);
-//       // Serial.print("FB = ");
-//       // Serial.println(j);
-//       sendMessageWithVarToPython("FB", j);
-
-//       // set useprev
-//       digitalWrite(usePrevpin, usePrev);
-//       delayMicroseconds(other_delay);
-//       // Serial.print("useprev = ");
-//       // Serial.println(usePrev);
-//       sendMessageWithVarToPython("usePrev", usePrev);
-
-//       if (!usePrev){
-//         // clamp values (only used if useprev = 0)
-//         for (int i = 0; i < 2; i ++){
-//           digitalWrite(clampValpins[i], clampVals[i]);
-//           delayMicroseconds(other_delay);
-//         }
-//         // if useprev = 0 to start, switch it to 1 after the first iteration
-//         usePrev = 1;
-//       }
-
-//       delayMicroseconds(equil_delay);
-
-//       // trigger comparator outputs into D flop
-//       digitalWrite(readMempin, 1);
-//       delayMicroseconds(trigger_delay);
-//       sendMessageToPython("readMem triggered");
-
-//       // store comparator outputs in second D flop
-//       digitalWrite(storeMempin, 1);
-//       delayMicroseconds(other_delay);
-//       sendMessageToPython("storeMem triggered");
-
-//       // reset values
-//       digitalWrite(readMempin, 0);
-//       delayMicroseconds(trigger_delay);
-//       digitalWrite(storeMempin, 0);
-//       delayMicroseconds(other_delay);
-//       sendMessageToPython("all triggers reset");
-      
-//       delay(1000);
-//     }
-//   }
-//   analog_measurement(1, nmestimes); //take analog measurement of V nodes
-
-//   // last step is always forward
-//   digitalWrite(FBpin, 0);
-//   delayMicroseconds(other_delay);
-//   sendMessageToPython("FB = 0");
-
-//   // useprev is 1
-//   digitalWrite(usePrevpin, 1);
-//   delayMicroseconds(other_delay);
-//   sendMessageToPython("usePrev = 1");
-
-//    // trigger comparator outputs into D flop
-//   digitalWrite(readMempin, 1);
-//   delayMicroseconds(trigger_delay);
-//   sendMessageToPython("readMem triggered");
-
-//   delay(1000);
-//   sendMessageToPython("big delay");
-
-//   // record digitized values in edge MCC
-//   digitalWrite(recordRpin, 1);
-//   delayMicroseconds(other_delay);
-//   sendMessageToPython("recordR triggered");
-
-//   // store comparator outputs in second D flop
-//   digitalWrite(storeMempin, 1);
-//   delayMicroseconds(other_delay);
-//   sendMessageToPython("storeMem triggered");
-
-//   // reset triggers
-//   digitalWrite(readMempin, 0);
-//   delayMicroseconds(trigger_delay);
-//   digitalWrite(recordRpin, 0);
-//   delayMicroseconds(other_delay);
-//   digitalWrite(storeMempin, 0);
-//   delayMicroseconds(other_delay);
-//   sendMessageToPython("all triggers reset");
-
-//   analog_measurement(0, nmestimes); // take analog measurement of H nodes
-// }
 
 void R_state(int analogRecord){
   R_state_f1(0,0);
@@ -1417,4 +1335,108 @@ void get_random_permutation(int N){
 //   if (vi != numVe){
 //     sendMessageToPython("error wrong number of Ve");
 //   }
+// }
+
+// void R_state(){
+//   // reset triggers
+//   digitalWrite(readMempin, 0);
+//   delayMicroseconds(trigger_delay);
+//   digitalWrite(recordRpin, 0);
+//   delayMicroseconds(other_delay);
+//   digitalWrite(storeMempin, 0);
+//   delayMicroseconds(other_delay);
+//   sendMessageToPython("all triggers reset");
+
+//   for (int i = 0; i < numProp; i++){
+//     // Serial.print("prop = ");
+//     // Serial.println(i);
+//     sendMessageWithVarToPython("prop", i);
+
+//     for (int j = 0; j < 2; j++){
+//       // do one forward, one backward per propagation step
+//       digitalWrite(FBpin, j);
+//       delayMicroseconds(other_delay);
+//       // Serial.print("FB = ");
+//       // Serial.println(j);
+//       sendMessageWithVarToPython("FB", j);
+
+//       // set useprev
+//       digitalWrite(usePrevpin, usePrev);
+//       delayMicroseconds(other_delay);
+//       // Serial.print("useprev = ");
+//       // Serial.println(usePrev);
+//       sendMessageWithVarToPython("usePrev", usePrev);
+
+//       if (!usePrev){
+//         // clamp values (only used if useprev = 0)
+//         for (int i = 0; i < 2; i ++){
+//           digitalWrite(clampValpins[i], clampVals[i]);
+//           delayMicroseconds(other_delay);
+//         }
+//         // if useprev = 0 to start, switch it to 1 after the first iteration
+//         usePrev = 1;
+//       }
+
+//       delayMicroseconds(equil_delay);
+
+//       // trigger comparator outputs into D flop
+//       digitalWrite(readMempin, 1);
+//       delayMicroseconds(trigger_delay);
+//       sendMessageToPython("readMem triggered");
+
+//       // store comparator outputs in second D flop
+//       digitalWrite(storeMempin, 1);
+//       delayMicroseconds(other_delay);
+//       sendMessageToPython("storeMem triggered");
+
+//       // reset values
+//       digitalWrite(readMempin, 0);
+//       delayMicroseconds(trigger_delay);
+//       digitalWrite(storeMempin, 0);
+//       delayMicroseconds(other_delay);
+//       sendMessageToPython("all triggers reset");
+      
+//       delay(1000);
+//     }
+//   }
+//   analog_measurement(1, nmestimes); //take analog measurement of V nodes
+
+//   // last step is always forward
+//   digitalWrite(FBpin, 0);
+//   delayMicroseconds(other_delay);
+//   sendMessageToPython("FB = 0");
+
+//   // useprev is 1
+//   digitalWrite(usePrevpin, 1);
+//   delayMicroseconds(other_delay);
+//   sendMessageToPython("usePrev = 1");
+
+//    // trigger comparator outputs into D flop
+//   digitalWrite(readMempin, 1);
+//   delayMicroseconds(trigger_delay);
+//   sendMessageToPython("readMem triggered");
+
+//   delay(1000);
+//   sendMessageToPython("big delay");
+
+//   // record digitized values in edge MCC
+//   digitalWrite(recordRpin, 1);
+//   delayMicroseconds(other_delay);
+//   sendMessageToPython("recordR triggered");
+
+//   // store comparator outputs in second D flop
+//   digitalWrite(storeMempin, 1);
+//   delayMicroseconds(other_delay);
+//   sendMessageToPython("storeMem triggered");
+
+//   // reset triggers
+//   digitalWrite(readMempin, 0);
+//   delayMicroseconds(trigger_delay);
+//   digitalWrite(recordRpin, 0);
+//   delayMicroseconds(other_delay);
+//   digitalWrite(storeMempin, 0);
+//   delayMicroseconds(other_delay);
+//   sendMessageToPython("all triggers reset");
+
+//   analog_measurement(0, nmestimes); // take analog measurement of H nodes
 // }
